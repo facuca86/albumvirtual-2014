@@ -1074,7 +1074,7 @@ function Sticker({ sticker, onToggle, currentTeam, darkMode = false, justPasted 
     <button
       onClick={() => onToggle(sticker.code)}
       style={brillanteStyle}
-      className={`relative border-2 rounded-xl sm:rounded-2xl p-2 sm:p-4 w-full flex items-center justify-center text-center transition active:opacity-60 aspect-[2/3] ${
+      className={`relative border-2 rounded-xl sm:rounded-2xl p-2 sm:p-4 w-full flex items-center justify-center text-center transition active:opacity-60 aspect-[2/3] self-start ${
         sticker.repeated ? repeatedBg :
         brillanteStyle   ? '' :
         sticker.completed ? completedBg :
