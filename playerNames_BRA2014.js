@@ -5,7 +5,7 @@
 // Todos genéricos hasta que el usuario los provea
 
 export const playerNames = {
-  BRA: { 2:"Equipo", 3:"Julio Cesar", 4:"Thiago Silva", 5:"David Luiz", 6:"Jugador 6", 7:"Marcelo", 8:"Jugador 8", 9:"Jugador 9", 10:"Jugador 10", 11:"Jugador 11", 12:"Hernanes", 13:"Jugador 13", 14:"Jugador 14", 15:"Jugador 15", 16:"Robinho", 17:"Jugador 17", 18:"Jugador 18", 19:"Fred" },
+  BRA: { 2:"Equipo", 3:"Julio Cesar", 4:"Thiago Silva", 5:"David Luiz", 6:"Jugador 6", 7:"Marcelo", 8:"Jugador 8", 9:"Jugador 9", 10:"Jugador 10", 11:"Jugador 11", 12:"Hernanes", 13:"Jugador 13", 14:"Jugador 14", 15:"Jugador 15", 16:"Robinho", 17:"Jugador 17", 18:"Hulk", 19:"Fred" },
   CRO: { 2:"Equipo", 3:"Stipe Pletikosa", 4:"Jugador 4", 5:"Jugador 5", 6:"Jugador 6", 7:"Jugador 7", 8:"Domagoj Vida", 9:"Sime Vrsaljko", 10:"Jugador 10", 11:"Jugador 11", 12:"Jugador 12", 13:"Ivan Rakitic", 14:"Mateo Kovacic", 15:"Jugador 15", 16:"Jugador 16", 17:"Eduardo", 18:"Jugador 18", 19:"Jugador 19" },
   MEX: { 2:"Equipo", 3:"Jugador 3", 4:"Jugador 4", 5:"Francisco Rodriguez", 6:"Hector Moreno", 7:"Jugador 7", 8:"Jugador 8", 9:"Jugador 9", 10:"Andres Guardado", 11:"Jugador 11", 12:"Jugador 12", 13:"Jugador 13", 14:"Jugador 14", 15:"Aldo de Nigris", 16:"Jugador 16", 17:"Jugador 17", 18:"Jugador 18", 19:"Jugador 19" },
   CMR: { 2:"Equipo", 3:"Charles Itandje", 4:"Jugador 4", 5:"Jugador 5", 6:"Jugador 6", 7:"Henri Bedimo", 8:"Jugador 8", 9:"Jugador 9", 10:"Stéphane Mbia", 11:"Jugador 11", 12:"Eyong Enoh", 13:"Jean Makoun", 14:"Landry N'Guémo", 15:"Vincent Aboubakar", 16:"Eric Choupo-Moting", 17:"Benjamin Moukandjo", 18:"Jugador 18", 19:"Jugador 19" },
