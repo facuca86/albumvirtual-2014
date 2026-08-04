@@ -1358,7 +1358,7 @@ function Sticker({ sticker, onToggle, currentTeam, darkMode = false, justPasted 
 // ProgressHistoryModal
 // ═══════════════════════════════════════════════════════════════════════════════
 function ProgressHistoryModal({ history, darkMode, onClose }) {
-  const rows = [...history].sort((a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0));
+  const rows = [...history].sort((a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0));
   return (
     <div className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4">
       <div className={`rounded-3xl p-6 sm:p-8 shadow-2xl w-full max-w-2xl transition-colors duration-300 ${darkMode ? 'bg-[#1a3d1a] text-white' : 'bg-white'}`}>
