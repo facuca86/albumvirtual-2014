@@ -26,9 +26,28 @@ const formatDateTime = (date) => {
   return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 };
 
+// Entradas guardadas antes de que existieran id/timestamp (versión previa de handleMarkProgress)
+// reciben acá un id/timestamp derivado, de forma determinística, para no perderlas al mergear.
+const parseDateLabel = (label) => {
+  const m = /^(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2})$/.exec(label || '');
+  if (!m) return null;
+  const [, d, mo, y, h, mi] = m;
+  return new Date(Number(y), Number(mo) - 1, Number(d), Number(h), Number(mi)).getTime();
+};
+
+const normalizeHistoryEntry = (entry) => {
+  if (!entry || (entry.id && entry.timestamp)) return entry;
+  return {
+    ...entry,
+    id: entry.id ?? `legacy-${entry.dateLabel}-${entry.completedCount}-${entry.remainingCount}`,
+    timestamp: entry.timestamp ?? parseDateLabel(entry.dateLabel) ?? 0,
+  };
+};
+
 const mergeHistoryEntries = (...lists) => {
   const byId = new Map();
-  for (const entry of lists.flat()) {
+  for (const raw of lists.flat()) {
+    const entry = normalizeHistoryEntry(raw);
     if (entry && entry.id) byId.set(entry.id, entry);
   }
   return [...byId.values()].sort((a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0));
@@ -294,7 +313,7 @@ export default function PaniniAlbumBRA2014() {
       }
 
       if (remoteEntries === null) {
-        setProgressHistory(localEntries);
+        setProgressHistory(localEntries.map(normalizeHistoryEntry));
         return;
       }
 
@@ -302,9 +321,10 @@ export default function PaniniAlbumBRA2014() {
       setProgressHistory(merged);
       try { localStorage.setItem(LOCAL_STORAGE_HISTORY_KEY, JSON.stringify(merged)); } catch (_) {}
 
-      // Re-sube al proveedor de la nube cualquier registro local que no haya llegado a Firestore
-      // (por ejemplo, un guardado previo que falló por estar offline).
-      const remoteIds = new Set(remoteEntries.map(e => e.id));
+      // Re-sube al proveedor de la nube cualquier registro local (incluidas entradas
+      // "legacy" sin id/timestamp) que no haya llegado a Firestore — por ejemplo, un
+      // guardado previo que falló por estar offline.
+      const remoteIds = new Set(remoteEntries.map(e => normalizeHistoryEntry(e).id));
       const missingFromCloud = merged.filter(e => !remoteIds.has(e.id));
       if (missingFromCloud.length > 0 && progressHistoryDocRef) {
         try { await setDoc(progressHistoryDocRef, { entries: arrayUnion(...missingFromCloud) }, { merge: true }); } catch (_) {}
