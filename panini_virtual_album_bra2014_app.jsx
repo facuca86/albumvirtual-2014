@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { db, doc, getDoc, setDoc, onSnapshot } from './firebase_BRA2014';
+import { db, doc, getDoc, setDoc, onSnapshot, arrayUnion } from './firebase_BRA2014';
 import { playerNames } from './playerNames_BRA2014';
 import { teamThemes } from './teamThemes_BRA2014';
 import { albumConfig, codeToNumber, numberToCode } from './albumConfig_BRA2014';
@@ -24,6 +24,14 @@ const progressHistoryDocRef = db ? doc(db, 'albumProgressHistory', albumConfig.i
 const formatDateTime = (date) => {
   const pad = (n) => String(n).padStart(2, '0');
   return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+};
+
+const mergeHistoryEntries = (...lists) => {
+  const byId = new Map();
+  for (const entry of lists.flat()) {
+    if (entry && entry.id) byId.set(entry.id, entry);
+  }
+  return [...byId.values()].sort((a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0));
 };
 
 const PROYECTOS = [
@@ -264,24 +272,43 @@ export default function PaniniAlbumBRA2014() {
   // ── Load progress history ─────────────────────────────────────────────────
   useEffect(() => {
     const loadHistory = async () => {
+      let localEntries = [];
+      try {
+        const localData = localStorage.getItem(LOCAL_STORAGE_HISTORY_KEY);
+        if (localData) {
+          const parsed = JSON.parse(localData);
+          if (Array.isArray(parsed)) localEntries = parsed;
+        }
+      } catch (_) {}
+
+      let remoteEntries = null;
       try {
         if (progressHistoryDocRef) {
           const snap = await getDoc(progressHistoryDocRef);
           if (snap.exists() && Array.isArray(snap.data()?.entries)) {
-            setProgressHistory(snap.data().entries);
-            return;
+            remoteEntries = snap.data().entries;
           }
         }
       } catch (error) {
         console.error('Error loading progress history from Firestore:', error);
       }
-      try {
-        const localData = localStorage.getItem(LOCAL_STORAGE_HISTORY_KEY);
-        if (localData) {
-          const parsed = JSON.parse(localData);
-          if (Array.isArray(parsed)) setProgressHistory(parsed);
-        }
-      } catch (_) {}
+
+      if (remoteEntries === null) {
+        setProgressHistory(localEntries);
+        return;
+      }
+
+      const merged = mergeHistoryEntries(localEntries, remoteEntries);
+      setProgressHistory(merged);
+      try { localStorage.setItem(LOCAL_STORAGE_HISTORY_KEY, JSON.stringify(merged)); } catch (_) {}
+
+      // Re-sube al proveedor de la nube cualquier registro local que no haya llegado a Firestore
+      // (por ejemplo, un guardado previo que falló por estar offline).
+      const remoteIds = new Set(remoteEntries.map(e => e.id));
+      const missingFromCloud = merged.filter(e => !remoteIds.has(e.id));
+      if (missingFromCloud.length > 0 && progressHistoryDocRef) {
+        try { await setDoc(progressHistoryDocRef, { entries: arrayUnion(...missingFromCloud) }, { merge: true }); } catch (_) {}
+      }
     };
     loadHistory();
   }, []);
@@ -437,8 +464,11 @@ export default function PaniniAlbumBRA2014() {
   const remainingCount    = Math.max(TOTAL_STICKERS - completedCount, 0);
 
   const handleMarkProgress = async () => {
+    const now = new Date();
     const entry = {
-      dateLabel:  formatDateTime(new Date()),
+      id: `${now.getTime()}-${Math.random().toString(36).slice(2, 8)}`,
+      timestamp: now.getTime(),
+      dateLabel:  formatDateTime(now),
       percentCompleted: completionPercent,
       percentRemaining: remainingPercent,
       completedCount,
@@ -448,7 +478,9 @@ export default function PaniniAlbumBRA2014() {
     setProgressHistory(nextHistory);
     try { localStorage.setItem(LOCAL_STORAGE_HISTORY_KEY, JSON.stringify(nextHistory)); } catch (_) {}
     try {
-      if (progressHistoryDocRef) await setDoc(progressHistoryDocRef, { entries: nextHistory });
+      // Se usa arrayUnion (append atómico) en vez de sobreescribir todo el array,
+      // para no perder registros guardados casi al mismo tiempo desde otro dispositivo.
+      if (progressHistoryDocRef) await setDoc(progressHistoryDocRef, { entries: arrayUnion(entry) }, { merge: true });
     } catch (error) {
       console.error('Error saving progress history to Firestore:', error);
     }
@@ -1306,7 +1338,7 @@ function Sticker({ sticker, onToggle, currentTeam, darkMode = false, justPasted 
 // ProgressHistoryModal
 // ═══════════════════════════════════════════════════════════════════════════════
 function ProgressHistoryModal({ history, darkMode, onClose }) {
-  const rows = [...history].reverse();
+  const rows = [...history].sort((a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0));
   return (
     <div className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4">
       <div className={`rounded-3xl p-6 sm:p-8 shadow-2xl w-full max-w-2xl transition-colors duration-300 ${darkMode ? 'bg-[#1a3d1a] text-white' : 'bg-white'}`}>
@@ -1332,8 +1364,8 @@ function ProgressHistoryModal({ history, darkMode, onClose }) {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((entry, i) => (
-                  <tr key={i} className={`border-t ${darkMode ? 'border-[#1a5a1a]' : 'border-slate-200'}`}>
+                {rows.map((entry) => (
+                  <tr key={entry.id ?? entry.dateLabel} className={`border-t ${darkMode ? 'border-[#1a5a1a]' : 'border-slate-200'}`}>
                     <td className="px-3 py-2 font-black whitespace-nowrap">{entry.dateLabel}</td>
                     <td className="px-3 py-2 text-right">{entry.percentCompleted}%</td>
                     <td className="px-3 py-2 text-right">{entry.percentRemaining}%</td>
