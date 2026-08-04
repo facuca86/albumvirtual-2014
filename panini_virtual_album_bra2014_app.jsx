@@ -4,8 +4,9 @@ import { playerNames } from './playerNames_BRA2014';
 import { teamThemes } from './teamThemes_BRA2014';
 import { albumConfig, codeToNumber, numberToCode } from './albumConfig_BRA2014';
 
-const LOCAL_STORAGE_KEY      = `${albumConfig.id}_stickers`;
-const LOCAL_STORAGE_DARK_KEY = `${albumConfig.id}_darkMode`;
+const LOCAL_STORAGE_KEY         = `${albumConfig.id}_stickers`;
+const LOCAL_STORAGE_DARK_KEY    = `${albumConfig.id}_darkMode`;
+const LOCAL_STORAGE_HISTORY_KEY = `${albumConfig.id}_progressHistory`;
 
 const ALBUM_OWNER    = albumConfig.owner;
 const VIEW_PARAM     = new URLSearchParams(window.location.search).get('view');
@@ -16,8 +17,14 @@ const teamData   = albumConfig.teamData;
 const teamGroups = albumConfig.teamGroups;
 const groups     = albumConfig.groups;
 
-const progressDocRef = db ? doc(db, 'albumProgress', albumConfig.id) : null;
-const settingsDocRef = db ? doc(db, 'albumSettings', albumConfig.id) : null;
+const progressDocRef        = db ? doc(db, 'albumProgress', albumConfig.id) : null;
+const settingsDocRef        = db ? doc(db, 'albumSettings', albumConfig.id) : null;
+const progressHistoryDocRef = db ? doc(db, 'albumProgressHistory', albumConfig.id) : null;
+
+const formatDateTime = (date) => {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+};
 
 const PROYECTOS = [
   {
@@ -193,6 +200,9 @@ export default function PaniniAlbumBRA2014() {
   const [highlightCode, setHighlightCode]       = useState(null);
   const [searchOpen, setSearchOpen]             = useState(false);
   const [searchQuery, setSearchQuery]           = useState('');
+  const [progressHistory, setProgressHistory]   = useState([]);
+  const [showProgressHistory, setShowProgressHistory] = useState(false);
+  const [progressMessage, setProgressMessage]   = useState('');
   const isInitialLoad = useRef(true);
   const [repetidasSelected, setRepetidasSelected] = useState(new Set());
   const [repetidasPending, setRepetidasPending] = useState([]);
@@ -249,6 +259,31 @@ export default function PaniniAlbumBRA2014() {
       if (local !== null) setDarkMode(local === 'true');
     };
     loadDarkMode();
+  }, []);
+
+  // ── Load progress history ─────────────────────────────────────────────────
+  useEffect(() => {
+    const loadHistory = async () => {
+      try {
+        if (progressHistoryDocRef) {
+          const snap = await getDoc(progressHistoryDocRef);
+          if (snap.exists() && Array.isArray(snap.data()?.entries)) {
+            setProgressHistory(snap.data().entries);
+            return;
+          }
+        }
+      } catch (error) {
+        console.error('Error loading progress history from Firestore:', error);
+      }
+      try {
+        const localData = localStorage.getItem(LOCAL_STORAGE_HISTORY_KEY);
+        if (localData) {
+          const parsed = JSON.parse(localData);
+          if (Array.isArray(parsed)) setProgressHistory(parsed);
+        }
+      } catch (_) {}
+    };
+    loadHistory();
   }, []);
 
   // ── Save progress ──────────────────────────────────────────────────────────
@@ -398,7 +433,28 @@ export default function PaniniAlbumBRA2014() {
   const completedCount    = Object.entries(completed).filter(([c,v]) => !c.startsWith(albumConfig.promoCodePrefix) && isCompletedSticker(v)).length;
   const repeatedCount     = Object.values(completed).filter(isRepeatedSticker).length;
   const completionPercent = Math.round((completedCount / TOTAL_STICKERS) * 100);
+  const remainingPercent  = 100 - completionPercent;
   const remainingCount    = Math.max(TOTAL_STICKERS - completedCount, 0);
+
+  const handleMarkProgress = async () => {
+    const entry = {
+      dateLabel:  formatDateTime(new Date()),
+      percentCompleted: completionPercent,
+      percentRemaining: remainingPercent,
+      completedCount,
+      remainingCount,
+    };
+    const nextHistory = [...progressHistory, entry];
+    setProgressHistory(nextHistory);
+    try { localStorage.setItem(LOCAL_STORAGE_HISTORY_KEY, JSON.stringify(nextHistory)); } catch (_) {}
+    try {
+      if (progressHistoryDocRef) await setDoc(progressHistoryDocRef, { entries: nextHistory });
+    } catch (error) {
+      console.error('Error saving progress history to Firestore:', error);
+    }
+    setProgressMessage('✅ Progreso marcado');
+    setTimeout(() => setProgressMessage(''), 2000);
+  };
 
   const selectionTeams = albumConfig.competingTeams;
 
@@ -900,11 +956,24 @@ export default function PaniniAlbumBRA2014() {
             <div className={`mt-4 pt-4 border-t ${darkMode ? 'border-[#1a5a1a]' : 'border-slate-200'} flex flex-wrap gap-3`}>
               <button onClick={() => { setShowStats(false); setCurrentView('stats-selections'); }}
                 className="bg-cyan-700 text-white px-6 py-3 rounded-2xl font-black">Estadísticas Selecciones</button>
+              <button onClick={handleMarkProgress}
+                className="bg-purple-600 text-white px-6 py-3 rounded-2xl font-black">Marcar Progreso</button>
+              <button onClick={() => { setShowStats(false); setShowProgressHistory(true); }}
+                className="bg-orange-500 text-white px-6 py-3 rounded-2xl font-black">Ver Progreso</button>
+              {progressMessage && <span className="w-full text-green-600 font-black">{progressMessage}</span>}
               <button onClick={() => setShowStats(false)}
                 className={`px-6 py-3 rounded-2xl font-black ${darkMode ? 'bg-slate-600 text-white' : 'bg-slate-300 text-slate-800'}`}>Cerrar</button>
             </div>
           </div>
         </div>
+      )}
+
+      {showProgressHistory && (
+        <ProgressHistoryModal
+          history={progressHistory}
+          darkMode={darkMode}
+          onClose={() => setShowProgressHistory(false)}
+        />
       )}
 
       {showQR      && <QRModal onClose={() => setShowQR(false)} />}
@@ -1230,6 +1299,58 @@ function Sticker({ sticker, onToggle, currentTeam, darkMode = false, justPasted 
         </div>
       </div>
     </button>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ProgressHistoryModal
+// ═══════════════════════════════════════════════════════════════════════════════
+function ProgressHistoryModal({ history, darkMode, onClose }) {
+  const rows = [...history].reverse();
+  return (
+    <div className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4">
+      <div className={`rounded-3xl p-6 sm:p-8 shadow-2xl w-full max-w-2xl transition-colors duration-300 ${darkMode ? 'bg-[#1a3d1a] text-white' : 'bg-white'}`}>
+        <h3 className="text-2xl font-black italic uppercase mb-6">Ver Progreso</h3>
+        {rows.length === 0 ? (
+          <div className="text-center py-8">
+            <div className="text-4xl mb-3">📊</div>
+            <div className="font-black text-xl">Todavía no hay registros</div>
+            <div className={`mt-2 text-sm ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+              Usá "Marcar Progreso" para guardar una foto de tu avance.
+            </div>
+          </div>
+        ) : (
+          <div className="max-h-[60vh] overflow-auto rounded-2xl border border-slate-300/30">
+            <table className="w-full text-sm">
+              <thead className={`sticky top-0 ${darkMode ? 'bg-[#0d2a0d]' : 'bg-slate-100'}`}>
+                <tr className="text-left font-black uppercase text-xs">
+                  <th className="px-3 py-2">Fecha y Hora</th>
+                  <th className="px-3 py-2 text-right">% Completado</th>
+                  <th className="px-3 py-2 text-right">% Restante</th>
+                  <th className="px-3 py-2 text-right">Completadas</th>
+                  <th className="px-3 py-2 text-right">Restantes</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((entry, i) => (
+                  <tr key={i} className={`border-t ${darkMode ? 'border-[#1a5a1a]' : 'border-slate-200'}`}>
+                    <td className="px-3 py-2 font-black whitespace-nowrap">{entry.dateLabel}</td>
+                    <td className="px-3 py-2 text-right">{entry.percentCompleted}%</td>
+                    <td className="px-3 py-2 text-right">{entry.percentRemaining}%</td>
+                    <td className="px-3 py-2 text-right">{entry.completedCount}</td>
+                    <td className="px-3 py-2 text-right">{entry.remainingCount}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <div className="mt-6 flex flex-wrap gap-3">
+          <button onClick={onClose}
+            className={`px-6 py-3 rounded-2xl font-black ${darkMode ? 'bg-slate-600 text-white' : 'bg-slate-300 text-slate-800'}`}>Cerrar</button>
+        </div>
+      </div>
+    </div>
   );
 }
 
