@@ -214,6 +214,7 @@ function getTeamForCode(code) {
 
 export default function PaniniAlbumBRA2014() {
   if (VIEW_PARAM === 'repetidas') return <RepeatidasView />;
+  if (VIEW_PARAM === 'faltan') return <FaltanView />;
 
   const [currentView, setCurrentView]           = useState('home');
   const [currentTeamIndex, setCurrentTeamIndex] = useState(0);
@@ -221,6 +222,8 @@ export default function PaniniAlbumBRA2014() {
   const [showStats, setShowStats]               = useState(false);
   const [importMessage, setImportMessage]       = useState('');
   const [showQR, setShowQR]                     = useState(false);
+  const [showFaltanQR, setShowFaltanQR]         = useState(false);
+  const [showExportTextFaltan, setShowExportTextFaltan] = useState(false);
   const [darkMode, setDarkMode]                 = useState(false);
   const [celebration, setCelebration]           = useState(null);
   const [justPastedCode, setJustPastedCode]     = useState(null);
@@ -483,6 +486,15 @@ export default function PaniniAlbumBRA2014() {
   const remainingPercent  = 100 - completionPercent;
   const remainingCount    = Math.max(TOTAL_STICKERS - completedCount, 0);
 
+  const faltantesGrouped = useMemo(() => {
+    const byTeam = {};
+    for (const team of teams) {
+      const missing = getTeamCodes(team).filter((code) => !isCompletedSticker(completed[code]));
+      if (missing.length) byTeam[team] = missing;
+    }
+    return teams.filter(t => byTeam[t]).map(t => ({ team: t, info: teamData[t], codes: byTeam[t] }));
+  }, [completed]);
+
   const handleMarkProgress = async () => {
     const now = new Date();
     const entry = {
@@ -703,6 +715,10 @@ export default function PaniniAlbumBRA2014() {
               <span className="text-2xl">REPETIDAS</span><br/>
               <span className="text-sm font-medium opacity-70">Gestioná tus figuritas repetidas</span>
             </button>
+            <button onClick={() => setCurrentView('faltan')}
+              className={`rounded-3xl p-8 shadow-xl text-left active:scale-95 transition-colors duration-300 ${darkMode ? 'bg-[#1a3d1a] text-white' : 'bg-white'}`}>
+              <div className="text-3xl font-black italic uppercase">Me Faltan</div>
+            </button>
             <button onClick={() => setCurrentView('otros-proyectos')}
               className={`rounded-3xl p-8 shadow-xl text-left active:scale-95 transition-colors duration-300 ${darkMode ? 'bg-[#1a3d1a] text-white' : 'bg-white'}`}>
               <div className="text-3xl font-black italic uppercase">Otros Proyectos</div>
@@ -828,6 +844,110 @@ export default function PaniniAlbumBRA2014() {
             </div>
           );
         })()}
+
+        {/* ME FALTAN */}
+        {currentView === 'faltan' && (
+          <div className={`rounded-3xl p-6 sm:p-8 shadow-xl max-w-2xl mx-auto transition-colors duration-300 ${darkMode ? 'bg-[#1a3d1a] text-white' : 'bg-white'}`}>
+            <h2 className="text-3xl font-black italic uppercase mb-6">Me Faltan</h2>
+            {faltantesGrouped.length === 0 ? (
+              <div className="text-center py-8">
+                <div className="text-4xl mb-3">🏆</div>
+                <div className="font-black text-xl">¡Álbum completo!</div>
+                <div className={`mt-2 text-sm ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                  Ya tenés todas las figuritas.
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4 max-h-[55vh] overflow-y-auto pr-1 mb-4">
+                {faltantesGrouped.map(({ team, info, codes }) => (
+                  <div key={team} className={`rounded-2xl p-4 ${darkMode ? 'bg-[#0d2a0d]' : 'bg-slate-50'}`}>
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="text-2xl leading-none">{info?.flag || '🏳️'}</span>
+                      <div>
+                        <div className="font-black uppercase text-sm">{info?.name || team}</div>
+                        <div className={`text-[10px] uppercase tracking-wider ${darkMode ? 'text-slate-400' : 'text-slate-400'}`}>
+                          {codes.length} falta{codes.length !== 1 ? 'n' : ''}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {codes.map(code => {
+                        const name = getPlayerNameForCode(code);
+                        return (
+                          <span key={code} className="bg-slate-500 text-white text-xs font-black px-2.5 py-1 rounded-lg">
+                            {code}{name !== code ? ` · ${name}` : ''}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className={`mt-4 pt-4 border-t flex flex-wrap gap-3 ${darkMode ? 'border-[#1a5a1a]' : 'border-slate-200'}`}>
+              <button
+                onClick={() => setShowExportTextFaltan(true)}
+                disabled={faltantesGrouped.length === 0}
+                className={`px-6 py-3 rounded-2xl font-black transition-colors ${faltantesGrouped.length > 0 ? 'bg-blue-600 text-white' : darkMode ? 'bg-slate-700 text-slate-500 cursor-not-allowed' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}
+              >
+                EXPORTAR TEXTO
+              </button>
+              <button
+                onClick={() => setShowFaltanQR(true)}
+                className="bg-purple-600 text-white px-6 py-3 rounded-2xl font-black"
+              >
+                COMPARTIR QR
+              </button>
+              <button onClick={() => setCurrentView('home')}
+                className={`px-6 py-3 rounded-2xl font-black ${darkMode ? 'bg-slate-600 text-white' : 'bg-slate-300 text-slate-800'}`}>
+                ← VOLVER
+              </button>
+            </div>
+            {showExportTextFaltan && (() => {
+              const lines = faltantesGrouped.map(({ team, info, codes }) => {
+                const flag = info?.flag || '';
+                const name = info?.name || team;
+                const stickers = codes.map(code => {
+                  const n = getPlayerNameForCode(code);
+                  return n !== code ? `${code} (${n})` : code;
+                }).join(', ');
+                return `${flag} ${name}: ${stickers}`;
+              });
+              const text = `Figuritas que le faltan a ${ALBUM_OWNER} - Mundial Brasil 2014\n\n${lines.join('\n')}`;
+              return (
+                <div className="fixed inset-0 z-[70] bg-black/60 flex items-center justify-center p-4">
+                  <div className={`rounded-3xl p-6 shadow-2xl w-full max-w-lg ${darkMode ? 'bg-[#1a3d1a] text-white' : 'bg-white'}`}>
+                    <h3 className="text-xl font-black mb-1">Exportar faltantes</h3>
+                    <p className={`text-xs mb-4 ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                      Copiá el texto para pegarlo en WhatsApp o un correo
+                    </p>
+                    <textarea
+                      readOnly
+                      value={text}
+                      rows={Math.min(lines.length + 3, 14)}
+                      onClick={e => e.target.select()}
+                      className={`w-full rounded-2xl p-4 text-sm font-mono resize-none border outline-none ${darkMode ? 'bg-slate-800 text-white border-slate-600' : 'bg-slate-50 text-slate-800 border-slate-200'}`}
+                    />
+                    <div className="flex gap-3 mt-4">
+                      <button
+                        onClick={() => navigator.clipboard.writeText(text)}
+                        className="flex-1 bg-blue-600 text-white px-4 py-3 rounded-2xl font-black"
+                      >
+                        COPIAR
+                      </button>
+                      <button
+                        onClick={() => setShowExportTextFaltan(false)}
+                        className={`flex-1 px-4 py-3 rounded-2xl font-black ${darkMode ? 'bg-[#0d2a0d] text-white' : 'bg-slate-200 text-slate-800'}`}
+                      >
+                        CERRAR
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        )}
 
         {/* OTROS PROYECTOS */}
         {currentView === 'otros-proyectos' && (
@@ -1029,6 +1149,7 @@ export default function PaniniAlbumBRA2014() {
       )}
 
       {showQR      && <QRModal onClose={() => setShowQR(false)} />}
+      {showFaltanQR && <QRModal url={window.location.origin + window.location.pathname + '?view=faltan'} title="Me Faltan" onClose={() => setShowFaltanQR(false)} />}
       {celebration && <CelebrationModal celebration={celebration} teamData={teamData} teamThemes={teamThemes} getThemeKey={getThemeKey} getTeamConfettiColors={getTeamConfettiColors} onClose={() => setCelebration(null)} />}
     </div>
   );
@@ -1409,22 +1530,22 @@ function ProgressHistoryModal({ history, darkMode, onClose }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // QRModal
 // ═══════════════════════════════════════════════════════════════════════════════
-function QRModal({ onClose }) {
+function QRModal({ onClose, url, title }) {
   const qrRef = useRef(null);
-  const url   = window.location.origin + window.location.pathname + '?view=repetidas';
+  const qrUrl = url || (window.location.origin + window.location.pathname + '?view=repetidas');
 
   useEffect(() => {
     if (qrRef.current && window.QRCode) {
-      new window.QRCode(qrRef.current, { text: url, width: 200, height: 200 });
+      new window.QRCode(qrRef.current, { text: qrUrl, width: 200, height: 200 });
     }
   }, []);
 
   return (
     <div className="fixed inset-0 z-[70] bg-black/70 flex items-center justify-center p-4">
       <div className="bg-white rounded-3xl p-6 shadow-2xl flex flex-col items-center gap-4 max-w-xs w-full">
-        <h3 className="text-lg font-black italic uppercase">Figuritas Repetidas</h3>
+        <h3 className="text-lg font-black italic uppercase">{title || 'Figuritas Repetidas'}</h3>
         <div ref={qrRef} />
-        <p className="text-xs text-slate-400 text-center break-all">{url}</p>
+        <p className="text-xs text-slate-400 text-center break-all">{qrUrl}</p>
         <button onClick={onClose} className="bg-cyan-700 text-white px-6 py-3 rounded-2xl font-black w-full">Cerrar</button>
       </div>
     </div>
@@ -1529,6 +1650,94 @@ function RepeatidasView() {
                 return (
                   <span key={code} className="bg-slate-500 text-white text-xs font-black px-2.5 py-1 rounded-lg">
                     #{num}{name !== code ? ` · ${name}` : ''}
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </main>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// FaltanView
+// ═══════════════════════════════════════════════════════════════════════════════
+function FaltanView() {
+  const [stickerData, setStickerData] = useState(null);
+
+  useEffect(() => {
+    const loadFromLocal = () => {
+      try {
+        const local = localStorage.getItem(LOCAL_STORAGE_KEY);
+        setStickerData(local ? JSON.parse(local) : {});
+      } catch { setStickerData({}); }
+    };
+
+    const load = async () => {
+      try {
+        if (progressDocRef) {
+          const snap = await getDoc(progressDocRef);
+          if (snap.exists()) { setStickerData(snap.data()?.stickers || {}); return; }
+        }
+        loadFromLocal();
+      } catch { loadFromLocal(); }
+    };
+    load();
+  }, []);
+
+  const grouped = useMemo(() => {
+    if (!stickerData) return [];
+    const byTeam = {};
+    for (const team of teams) {
+      const missing = getTeamCodes(team).filter((code) => {
+        const v = stickerData[code];
+        return v !== true && v !== 'repeated';
+      });
+      if (missing.length) byTeam[team] = missing;
+    }
+    return teams.filter(t => byTeam[t]).map(t => ({ team: t, info: teamData[t], codes: byTeam[t] }));
+  }, [stickerData]);
+
+  if (!stickerData) {
+    return (
+      <div className="min-h-screen bg-[#5FBFD8] flex items-center justify-center">
+        <div className="text-white font-black text-xl">Cargando...</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-[#5FBFD8]">
+      <header className="bg-white shadow-sm sticky top-0 z-50">
+        <div className="max-w-2xl mx-auto px-4 py-3">
+          <h1 className="text-lg font-black italic uppercase text-slate-800">Figuritas que le faltan a {ALBUM_OWNER}</h1>
+          <p className="text-[10px] text-slate-400 uppercase tracking-widest">{albumConfig.repetidasSubtitle}</p>
+        </div>
+      </header>
+      <main className="max-w-2xl mx-auto px-4 py-5 space-y-3">
+        {grouped.length === 0 ? (
+          <div className="bg-white rounded-3xl p-8 text-center text-slate-800">
+            <div className="text-4xl mb-3">🏆</div>
+            <div className="font-black text-xl">¡Álbum completo!</div>
+            <div className="text-slate-500 mt-2 text-sm">Ya tiene todas las figuritas.</div>
+          </div>
+        ) : grouped.map(({ team, info, codes }) => (
+          <div key={team} className="bg-white rounded-2xl p-4 shadow">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-2xl leading-none">{info?.flag || '🏳️'}</span>
+              <div>
+                <div className="font-black uppercase text-sm text-slate-800">{info?.name || team}</div>
+                <div className="text-[10px] text-slate-400 uppercase tracking-wider">{codes.length} falta{codes.length !== 1 ? 'n' : ''}</div>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {codes.map(code => {
+                const name = getPlayerNameForCode(code);
+                return (
+                  <span key={code} className="bg-slate-500 text-white text-xs font-black px-2.5 py-1 rounded-lg">
+                    {code}{name !== code ? ` · ${name}` : ''}
                   </span>
                 );
               })}
