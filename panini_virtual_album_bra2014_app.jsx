@@ -53,24 +53,6 @@ const mergeHistoryEntries = (...lists) => {
   return [...byId.values()].sort((a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0));
 };
 
-// TEMPORAL: registro histórico puntual (primer registro del tablero de progreso).
-// Se mergea junto con el resto del historial y se sube solo a Firestore. Quitar
-// esta constante (y su uso en el useEffect "Load progress history") una vez sincronizado.
-const SEED_HISTORY_ENTRIES = (() => {
-  const seedDate = new Date(2026, 7, 10, 0, 0); // 10/08/2026 00:00 (mes 7 = agosto, 0-indexado)
-  const seedCompletedCount = 266;
-  const seedPercentCompleted = Math.round((seedCompletedCount / TOTAL_STICKERS) * 100);
-  return [{
-    id: `seed-${seedDate.getTime()}`,
-    timestamp: seedDate.getTime(),
-    dateLabel: formatDateTime(seedDate),
-    percentCompleted: seedPercentCompleted,
-    percentRemaining: 100 - seedPercentCompleted,
-    completedCount: seedCompletedCount,
-    remainingCount: Math.max(TOTAL_STICKERS - seedCompletedCount, 0),
-  }];
-})();
-
 const PROYECTOS = [
   {
     id: 'paniniWorldCup2026',
@@ -375,11 +357,11 @@ export default function PaniniAlbumBRA2014() {
       }
 
       if (remoteEntries === null) {
-        setProgressHistory(mergeHistoryEntries(localEntries, SEED_HISTORY_ENTRIES));
+        setProgressHistory(localEntries.map(normalizeHistoryEntry));
         return;
       }
 
-      const merged = mergeHistoryEntries(localEntries, remoteEntries, SEED_HISTORY_ENTRIES);
+      const merged = mergeHistoryEntries(localEntries, remoteEntries);
       setProgressHistory(merged);
       try { localStorage.setItem(LOCAL_STORAGE_HISTORY_KEY, JSON.stringify(merged)); } catch (_) {}
 
